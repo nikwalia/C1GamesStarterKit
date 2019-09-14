@@ -45,15 +45,15 @@ class AlgoStrategy(gamelib.AlgoCore):
         turn_state_obj = json.loads(turn_state)
         p2units = turn_state_obj["p2Units"]
         
-        enemy_defenses = []
+        enemy_defences = []
         for item in p2units:
             for sub_item in item:
                 x = sub_item[0]
                 y = sub_item[1]
                 for unit in game_state.game_map[x, y]:
-                    enemy_defenses.append(unit)
+                    enemy_defences.append(unit)
         
-        game_state.enemy_defenses = enemy_defenses
+        game_state.enemy_defences = enemy_defences
         
     def on_turn(self, turn_state):
         """
@@ -77,32 +77,67 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         if game_state.turn_number == 0:
             game_state.attempt_spawn(SCRAMBLER, turn1_scrambler_locations, 1)
+            return
+        
         pathFinder = gamelib.navigation.ShortestPathFinder()
         pathFinder.initialize_map(game_state)
+        
+        gamelib.debug_write(game_state.game_map.get_edge_locations(game_state.game_map.TOP_LEFT))
+        enemy_left_side_locations = game_state.game_map.get_edge_locations(game_state.game_map.TOP_LEFT)
+        enemy_right_side_locations = game_state.game_map.get_edge_locations(game_state.game_map.TOP_RIGHT)
 
-        enemy_left_side_locations = game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_LEFT)
-        enemy_right_side_locations = game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_RIGHT)
+        # enemy_defences = [[unit.x, unit.y] for unit in game_state.enemy_defences]
 
         edge_paths = []
-        for location in enemy_left_side_locations: 
-            edge_paths.append(game_state.find_path_to_edge(location, game_state.game_map.TOP_LEFT))
+        for location in enemy_left_side_locations:
+            edge_paths.append(game_state.find_path_to_edge(location, game_state.game_map.BOTTOM_LEFT))
+            edge_paths.append(game_state.find_path_to_edge(location, game_state.game_map.BOTTOM_RIGHT))
+        
+        gamelib.debug_write(edge_paths[0])
 
         for location in enemy_right_side_locations: 
             edge_paths.append(game_state.find_path_to_edge(location, game_state.game_map.TOP_RIGHT))
         
-        gamelib.debug_write(edge_paths)
-        self.print_locations_on_map(self.get_block_locations(game_state, edge_paths))
+        '''
+        for path in edge_paths:
+            if path is not None:
+                self.print_locations_on_map(path)
+        '''
+        
+        block_locations = [[x,y] for x, y in self.get_block_locations(game_state, edge_paths)]
+        gamelib.debug_write(block_locations)
+        self.print_locations_on_map(block_locations)
+        self.deploy_destructors(game_state, block_locations)
+    
+        
+
+    def deploy_destructors(self, game_state, block_locations):
+        min_y = 27
+        min_location = (27,27)
+        dlocs = []
+        for location in block_locations:
+            if location[1] < min_y:
+                min_y = location[1]
+                min_location = location
+                if len(dlocs) <= 15:
+                    dlocs.append(min_location)
+                else:
+                    dlocs.pop()
+                    dlocs.append(min_location)
+        
+        gamelib.debug_write(dlocs)
+        self.print_locations_on_map(dlocs)
+        game_state.attempt_spawn(DESTRUCTOR, min_location)
     
     def get_block_locations(self, game_state, edge_paths):
-
-        potential_block_locations = []
+        potential_block_locations = set()
 
         for path in edge_paths:
             if path is not None:
                 for location in path:
                     # if the path goes into our side
-                    if location[1] > 14:
-                        potential_block_locations.append(location)
+                    if location[1] >= 14:
+                        potential_block_locations.add((location[0], location[1]))
         
         return potential_block_locations
 
@@ -128,7 +163,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         # First let's figure out the cheapest unit
         # We could just check the game rules, but this demonstrates how to use the GameUnit class
         stationary_units = [FILTER, DESTRUCTOR, ENCRYPTOR]
-        cheapest_unit = FILTER
+        cheapest_unit = DESTRUCTOR
         for unit in stationary_units:
             unit_class = gamelib.GameUnit(unit, game_state.config)
             if unit_class.cost < gamelib.GameUnit(cheapest_unit, game_state.config).cost:
