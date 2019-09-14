@@ -54,7 +54,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         #game_state.suppress_warnings(True)  #Uncomment this line to suppress warnings.
 
         self.starter_strategy(game_state)
-
         game_state.submit_turn()
 
     """
